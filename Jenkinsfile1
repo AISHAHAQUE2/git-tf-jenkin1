@@ -3,44 +3,70 @@ pipeline {
 	
     environment {
         GOOGLE_APPLICATION_CREDENTIALS = credentials('gcp-key')
+ GCP_PROJECT = 'omega-jet-420717'
 	GIT_TOKEN = credentials('git-token')
+    TF_STATE_BUCKET = 'my_bucketuni'
+        // The path to your Terraform code (root directory)
+        TF_WORKSPACE = '.'
     }
-	
+
     stages {
-        stage('Git Checkout') {
+        stage('Checkout') {
             steps {
-               git "https://${GIT_TOKEN}@github.com/AISHAHAQUE2/git-tf-jenkin1.git"
+                // Checkout your Git repository containing the Terraform code
+                git url: 'https://github.com/AISHAHAQUE2/git-tf-jenkin1.git', branch: 'main'
             }
         }
-        
+
         stage('Terraform Init') {
             steps {
                 script {
-                    sh 'terraform init'
-                }
-            }
-        }
-        
-        stage('Terraform Plan') {
-            steps {
-                script {
-                    sh 'terraform plan -out=tfplan'
+                    // Initialize Terraform
+                    sh """
+                        cd ${env.TF_WORKSPACE}
+                        terraform init -backend-config="bucket=${env.TF_STATE_BUCKET}" -backend-config="prefix=terraform/state"
+                    """
                 }
             }
         }
 
-	    stage('Manual Approval') {
+        stage('Terraform Plan') {
             steps {
-                input "Approve?"
+                script {
+                    // Run Terraform plan to see what changes will be applied
+                    sh """
+                        cd ${env.TF_WORKSPACE}
+                        terraform plan -var="project=${env.GCP_PROJECT}"
+                    """
+                }
             }
         }
-	    
+
         stage('Terraform Apply') {
             steps {
                 script {
-                    sh 'terraform apply tfplan'
+                    // Apply the Terraform plan
+                    sh """
+                        cd ${env.TF_WORKSPACE}
+                        terraform apply -auto-approve -var="project=${env.GCP_PROJECT}"
+                    """
                 }
             }
+        }
+    }
+
+    post {
+        always {
+            // Clean up workspace after build
+            cleanWs()
+        }
+
+        success {
+            echo 'Terraform apply completed successfully!'
+        }
+
+        failure {
+            echo 'Terraform apply failed.'
         }
     }
 }
